@@ -1,0 +1,20 @@
+service test_glitchfree {
+    var x = 1;
+    var y = 2;
+    
+    // Normal definition (not glitch-free)
+    def normal_sum = x + y;
+    
+    // Glitch-free definition
+    @glitchfree def gf_sum = x + y;
+    
+    // Public glitch-free definition
+    @glitchfree pub def gf_product = x * y;
+}
+
+@test(test_glitchfree) {
+    do action { x = 10; y = 20; };
+    assert(normal_sum == 30);
+    assert(gf_sum == 30);
+    assert(gf_product == 200);
+}

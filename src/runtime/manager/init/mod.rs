@@ -55,7 +55,16 @@ impl Manager {
                     name
                 ));
 
-                self.alloc_def_actor(name, def_expr.clone())
+                // Extract is_glitch_free flag from declaration
+                let is_glitch_free = if let Some(Decl::DefDecl { is_glitch_free, .. }) = srv.decls.iter().find(|decl| {
+                    matches!(decl, Decl::DefDecl { name: n, .. } if n == name)
+                }) {
+                    *is_glitch_free
+                } else {
+                    false
+                };
+
+                self.alloc_def_actor(name, def_expr.clone(), is_glitch_free)
                     .await
                     .unwrap();
             }

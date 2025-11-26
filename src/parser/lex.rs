@@ -156,6 +156,8 @@ pub enum Token<'a> {
   PUB_KW,
   #[token("def")]
   DEF_KW,
+  #[token("@glitchfree")]
+  GLITCHFREE_KW,
   #[token("table")]
   TABLE_KW,
   #[token("insert")]

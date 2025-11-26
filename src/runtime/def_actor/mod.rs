@@ -36,6 +36,7 @@ pub struct DefActor {
     pub test_read_request: Option<(TestId, (ActorRef<Manager>, Vec<TxnId>))>,
 
     pub state: ChangeState,
+    pub is_glitch_free: bool,
 }
 
 impl DefActor {
@@ -46,6 +47,7 @@ impl DefActor {
         arg_to_values: HashMap<String, Expr>,          // def's args to their initialized values
         arg_to_vars: HashMap<String, HashSet<String>>, // args to their transitively dependent vars
         // if arg itself is var, then arg_to_vars[arg] = {arg}
+        is_glitch_free: bool,
     ) -> DefActor {
         DefActor {
             name,
@@ -56,6 +58,7 @@ impl DefActor {
             read_requests: HashMap::new(),
             test_read_request: None,
             state: ChangeState::new(expr, arg_to_values, arg_to_vars),
+            is_glitch_free,
         }
     }
 }

@@ -67,6 +67,7 @@ impl Manager {
                     test_name, bool_expr, test_id.0, test_id.1
                 ),
                 bool_expr.clone(),
+                false, // Assertions are not glitch-free definitions
             )
             .await
             .expect(&format!("alloc def actor failed for test {:?}", test_id));

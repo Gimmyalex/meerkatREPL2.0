@@ -29,6 +29,7 @@ impl Manager {
         &mut self,
         name: &String,
         expr: Expr,
+        is_glitch_free: bool,
     ) -> Result<ActorRef<DefActor>, Box<dyn Error>> {
         // calculate all information for def actor, default is used for non-source code part, like assertions
         let def_args = self.dep_graph.get(name).map_or_else(
@@ -98,6 +99,7 @@ impl Manager {
             val,
             def_arg_to_vals,
             def_arg_to_vars,
+            is_glitch_free,
         ));
         self.defname_to_actors
             .insert(name.clone(), actor_ref.clone());

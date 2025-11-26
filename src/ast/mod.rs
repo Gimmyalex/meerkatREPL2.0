@@ -134,6 +134,7 @@ pub enum Decl {
         name: String,
         val: Expr,
         is_pub: bool,
+        is_glitch_free: bool,
     },
     TableDecl {
         name: String,
@@ -284,7 +285,7 @@ impl Display for Decl {
         match self {
             Decl::Import { srv_name } => todo!(),
             Decl::VarDecl { name, val } => { write!(f, "var {} = {}", name, val) }
-            Decl::DefDecl { name, val, is_pub } => {
+            Decl::DefDecl { name, val, is_pub, .. } => {
                 if *is_pub {
                     write!(f, "pub def {} = {}", name, val)
                 } else {

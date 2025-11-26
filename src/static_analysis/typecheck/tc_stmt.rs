@@ -12,7 +12,7 @@ impl TypecheckEnv {
                 let typ = self.infer_expr(&val);
                 self.name_context.insert(name.clone(), typ);
             }
-            Decl::DefDecl { name, val, is_pub } => {
+            Decl::DefDecl { name, val, .. } => {
                 let typ = self.infer_expr(&val);
                 self.name_context.insert(name.clone(), typ);
             }
