@@ -42,6 +42,24 @@ impl kameo::prelude::Message<CmdMsg> for Manager {
                     // self.txn_mgrs.insert(txn_id.clone(), txn_mgr);
                     self.add_new_txn(txn_id.clone(), assns.clone(), inserts.clone(),from_client_addr);
 
+                    // Create glitch-free coordinator if needed
+                    let written_vars: HashSet<String> = assns.iter()
+                        .map(|a| a.dest.clone())
+                        .collect();
+                    
+                    let affected_glitchfree = self.compute_affected_glitchfree(&written_vars);
+                    
+                    if !affected_glitchfree.is_empty() {
+                        use crate::runtime::manager::GlitchFreeCoordinator;
+                        let coordinator = GlitchFreeCoordinator {
+                            txn_id: txn_id.clone(),
+                            expected_acks: affected_glitchfree,
+                            received_acks: HashSet::new(),
+                        };
+                        self.glitchfree_coordinators.insert(txn_id.clone(), coordinator);
+                        info!("Created glitch-free coordinator for txn {:?}", txn_id);
+                    }
+
                     if inserts.is_empty() {
                         info!("No inserts to process");
                     }
@@ -81,6 +99,12 @@ impl kameo::prelude::Message<CmdMsg> for Manager {
 
             TransactionAborted { txn_id } => {
                 info!("Transaction Aborted");
+                
+                // Clean up glitch-free coordinator if exists
+                if self.glitchfree_coordinators.remove(&txn_id).is_some() {
+                    info!("Cleaned up glitch-free coordinator for aborted txn {:?}", txn_id);
+                }
+                
                 let client_sender = self.get_client_sender(&txn_id);
                 client_sender.send(CmdMsg::TransactionAborted { txn_id }).await.unwrap();
 
@@ -266,9 +290,43 @@ impl kameo::prelude::Message<Msg> for Manager {
 
             Msg::GlitchFreeCommitAck { txn_id, name } => {
                 info!("Received GlitchFreeCommitAck from {} for txn {:?}", name, txn_id);
-                // For now, immediately commit
-                // In future, we would wait for a quorum or dependency set
-                let _ = self.tell_to_name(&name, Msg::GlitchFreeCommit { txn_id }).await;
+                
+                // Check if we should commit
+                let should_commit = if let Some(coordinator) = self.glitchfree_coordinators.get_mut(&txn_id) {
+                    // Record this Ack
+                    coordinator.received_acks.insert(name.clone());
+                    
+                    info!("Coordinator for txn {:?}: received {}/{} Acks", 
+                          txn_id, coordinator.received_acks.len(), coordinator.expected_acks.len());
+                    
+                    // Check if all expected Acks received
+                    coordinator.received_acks == coordinator.expected_acks
+                } else {
+                    // No coordinator for this txn - immediate commit (fallback for safety)
+                    info!("No coordinator found for txn {:?}, committing immediately", txn_id);
+                    true
+                };
+                
+                if should_commit {
+                    // Get the list of defs to commit before removing coordinator
+                    let defs_to_commit = if let Some(coordinator) = self.glitchfree_coordinators.remove(&txn_id) {
+                        info!("All Acks received for txn {:?}! Committing all glitch-free defs simultaneously", txn_id);
+                        coordinator.expected_acks
+                    } else {
+                        // Fallback: just commit the one that Ack'd
+                        let mut set = HashSet::new();
+                        set.insert(name.clone());
+                        set
+                    };
+                    
+                    // Now commit all (no longer holding mutable borrow)
+                    for def_name in &defs_to_commit {
+                        let _ = self.tell_to_name(def_name, Msg::GlitchFreeCommit { 
+                            txn_id: txn_id.clone() 
+                        }).await;
+                    }
+                }
+                
                 Msg::Unit
             }
 

@@ -67,6 +67,11 @@ impl Manager {
                 self.alloc_def_actor(name, def_expr.clone(), is_glitch_free, manager_addr.clone())
                     .await
                     .unwrap();
+                
+                // Track glitch-free defs
+                if is_glitch_free {
+                    self.glitchfree_defs.insert(name.clone());
+                }
             }
         }
 

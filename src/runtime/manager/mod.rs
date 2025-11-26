@@ -20,6 +20,15 @@ pub mod action;
 pub mod assert;
 pub mod handler;
 pub mod init;
+pub mod glitchfree;
+
+/// Coordinator for glitch-free transaction commits
+#[derive(Debug, Clone)]
+pub struct GlitchFreeCoordinator {
+    pub txn_id: TxnId,
+    pub expected_acks: HashSet<String>,  // Names of glitch-free defs we're waiting for
+    pub received_acks: HashSet<String>,  // Names that have Ack'd
+}
 
 #[derive(Debug)]
 pub struct Manager {
@@ -45,6 +54,10 @@ pub struct Manager {
     /// manager transactions and tests submitted to manager from client/developer
     pub txn_mgrs: HashMap<TxnId, TxnManager>,
     pub test_mgrs: HashMap<TestId, TestManager>,
+
+    /// glitch-free coordination
+    pub glitchfree_defs: HashSet<String>,  // Names of all glitch-free defs
+    pub glitchfree_coordinators: HashMap<TxnId, GlitchFreeCoordinator>,
 }
 
 impl Manager {
@@ -66,6 +79,9 @@ impl Manager {
 
             txn_mgrs: HashMap::new(),
             test_mgrs: HashMap::new(),
+
+            glitchfree_defs: HashSet::new(),
+            glitchfree_coordinators: HashMap::new(),
         }
     }
 }
