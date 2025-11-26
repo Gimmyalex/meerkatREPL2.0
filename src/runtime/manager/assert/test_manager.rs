@@ -68,6 +68,7 @@ impl Manager {
                 ),
                 bool_expr.clone(),
                 false, // Assertions are not glitch-free definitions
+                self.address.clone().expect("Manager address not set"),
             )
             .await
             .expect(&format!("alloc def actor failed for test {:?}", test_id));

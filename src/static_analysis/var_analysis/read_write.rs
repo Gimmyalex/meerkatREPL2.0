@@ -33,8 +33,8 @@ impl Expr {
                 }
                 free_vars
             }
-            Expr::Unop { op, expr } => expr.free_var(reactive_names, var_binded),
-            Expr::Binop { op, expr1, expr2 } => {
+            Expr::Unop { op: _, expr } => expr.free_var(reactive_names, var_binded),
+            Expr::Binop { op: _, expr1, expr2 } => {
                 let mut free_vars = expr1.free_var(reactive_names, var_binded);
                 free_vars.extend(expr2.free_var(reactive_names, var_binded));
                 free_vars

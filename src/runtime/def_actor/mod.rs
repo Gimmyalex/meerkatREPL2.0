@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use super::pubsub::PubSub;
 use crate::ast::Expr;
 use crate::runtime::manager::Manager;
-use crate::runtime::transaction::{TxnId, TxnPred};
+use crate::runtime::transaction::{Txn, TxnId, TxnPred};
 use crate::runtime::TestId;
 use state::ChangeState;
 
@@ -37,6 +37,8 @@ pub struct DefActor {
 
     pub state: ChangeState,
     pub is_glitch_free: bool,
+    pub buffered_outputs: HashMap<TxnId, (Expr, HashSet<Txn>)>,
+    pub manager_addr: ActorRef<Manager>,
 }
 
 impl DefActor {
@@ -48,6 +50,7 @@ impl DefActor {
         arg_to_vars: HashMap<String, HashSet<String>>, // args to their transitively dependent vars
         // if arg itself is var, then arg_to_vars[arg] = {arg}
         is_glitch_free: bool,
+        manager_addr: ActorRef<Manager>,
     ) -> DefActor {
         DefActor {
             name,
@@ -59,6 +62,8 @@ impl DefActor {
             test_read_request: None,
             state: ChangeState::new(expr, arg_to_values, arg_to_vars),
             is_glitch_free,
+            buffered_outputs: HashMap::new(),
+            manager_addr,
         }
     }
 }

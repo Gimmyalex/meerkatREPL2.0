@@ -18,7 +18,7 @@ use crate::{
 pub mod alloc_actors;
 
 impl Manager {
-    pub async fn alloc_service(&mut self, srv: &Service) {
+    pub async fn alloc_service(&mut self, srv: &Service, manager_addr: ActorRef<Manager>) {
         // intial evaluation of srv
         self.evaluator = eval_srv(srv);
 
@@ -64,7 +64,7 @@ impl Manager {
                     false
                 };
 
-                self.alloc_def_actor(name, def_expr.clone(), is_glitch_free)
+                self.alloc_def_actor(name, def_expr.clone(), is_glitch_free, manager_addr.clone())
                     .await
                     .unwrap();
             }

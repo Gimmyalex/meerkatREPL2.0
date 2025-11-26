@@ -17,7 +17,7 @@ use super::Manager;
 impl kameo::prelude::Message<CmdMsg> for Manager {
     type Reply = Option<CmdMsg>;
 
-    async fn handle(&mut self, msg: CmdMsg, _ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
+    async fn handle(&mut self, msg: CmdMsg, ctx: &mut Context<Self, Self::Reply>) -> Self::Reply {
         use CmdMsg::*;
         info!("MANAGER {} RECEIVE form Command Line: ", self.name);
         match msg {
@@ -89,7 +89,7 @@ impl kameo::prelude::Message<CmdMsg> for Manager {
 
             CodeUpdate { srv } => {
                 info!("Code Update");
-                self.alloc_service(&srv).await;
+                self.alloc_service(&srv, ctx.actor_ref()).await;
                 // todo(): handle alloc_service asynchronously
                 // to do so, exploit the developer sender
                 // for delayed response
@@ -263,6 +263,15 @@ impl kameo::prelude::Message<Msg> for Manager {
 
                 Msg::Unit
             }
+
+            Msg::GlitchFreeCommitAck { txn_id, name } => {
+                info!("Received GlitchFreeCommitAck from {} for txn {:?}", name, txn_id);
+                // For now, immediately commit
+                // In future, we would wait for a quorum or dependency set
+                let _ = self.tell_to_name(&name, Msg::GlitchFreeCommit { txn_id }).await;
+                Msg::Unit
+            }
+
             _ => panic!("Manager should not receive message from var/def actors"),
         }
     }

@@ -25,10 +25,10 @@ impl Expr {
                     item.alpha_rename(var_binded, renames);
                 }
             }
-            Expr::Unop { op, expr } => {
+            Expr::Unop { op: _, expr } => {
                 expr.alpha_rename(var_binded, renames);
             }
-            Expr::Binop { op, expr1, expr2 } => {
+            Expr::Binop { op: _, expr1, expr2 } => {
                 expr1.alpha_rename(var_binded, renames);
                 expr2.alpha_rename(var_binded, renames);
             }

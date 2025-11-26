@@ -132,6 +132,19 @@ pub enum Msg {
         val: Expr,
         preds: HashSet<Txn>, // table probably send Hashset::new() as pred
     },
+
+    // Coordinator (Manager) -> DefActor
+    // "Please commit the updates for this transaction"
+    GlitchFreeCommit {
+        txn_id: TxnId,
+    },
+
+    // DefActor -> Coordinator (Manager)
+    // "I have committed the updates for this transaction"
+    GlitchFreeCommitAck {
+        txn_id: TxnId,
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, Reply)]

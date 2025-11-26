@@ -113,6 +113,23 @@ impl kameo::prelude::Message<Msg> for DefActor {
                 Msg::Unit
             }
 
+            Msg::GlitchFreeCommit { txn_id } => {
+                if let Some((val, preds)) = self.buffered_outputs.remove(&txn_id) {
+                    let msg = Msg::PropChange {
+                        from_name: self.name.clone(),
+                        val,
+                        preds,
+                    };
+                    self.pubsub.publish(msg).await;
+                }
+                Msg::Unit
+            }
+
+            Msg::GlitchFreeCommitAck { .. } => {
+                // DefActor should not receive Ack
+                Msg::Unit
+            }
+
             _ => panic!("DefActor: unexpected message: {:?}", msg),
         }
     }
@@ -167,12 +184,25 @@ impl DefActor {
             info!("{:?} Successfully apply batch function, got new value: {}", self.name, self.value);
             let preds = self.state.get_preds_of_changes(&changes);
 
-            let msg = Msg::PropChange {
-                from_name: self.name.clone(),
-                val: self.value.clone().into(),
-                preds,
-            };
-            self.pubsub.publish(msg).await;
+            if self.is_glitch_free {
+                // Buffer the output and send Ack to Manager
+                for pred_txn in preds.iter() {
+                    self.buffered_outputs.insert(pred_txn.id.clone(), (self.value.clone().into(), preds.clone()));
+                    
+                    let _ = self.manager_addr.tell(Msg::GlitchFreeCommitAck {
+                        txn_id: pred_txn.id.clone(),
+                        name: self.name.clone(),
+                    }).await;
+                }
+            } else {
+                // Immediate propagation (existing behavior)
+                let msg = Msg::PropChange {
+                    from_name: self.name.clone(),
+                    val: self.value.clone().into(),
+                    preds,
+                };
+                self.pubsub.publish(msg).await;
+            }
         }
 
         // if we have read request and applied its preds
