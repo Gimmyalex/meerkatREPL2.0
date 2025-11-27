@@ -72,9 +72,12 @@ Meerkat uses an **actor-based architecture** where each component runs independe
 ```mermaid
 graph TB
     Client[Client/Test]
-    Manager[Manager Actor<br/>Coordinates transactions]
-    VarX[VarActor: x<br/>Stores variable value]
-    DefY[DefActor: y<br/>Computes derived value]
+    Manager["Manager Actor
+    Coordinates transactions"]
+    VarX["VarActor: x
+    Stores variable value"]
+    DefY["DefActor: y
+    Computes derived value"]
     
     Client -->|DoAction| Manager
     Manager -->|LockRequest| VarX
@@ -161,7 +164,7 @@ sequenceDiagram
     participant C as Client
     participant M as Manager
     participant V as VarActor (x)
-    participant D as DefActor (y)<br/>@glitchfree
+    participant D as DefActor (y) @glitchfree
     
     Note over C,D: Transaction: x = 5
     
@@ -171,12 +174,12 @@ sequenceDiagram
     M->>V: WriteRequest { x = 5 }
     V->>M: WriteFinish
     
-    Note over M: Release locks<br/>(enables PropChange)
+    Note over M: Release locks (enables PropChange)
     
     M->>V: LockRelease
     V->>D: PropChange { x = 5 }
     
-    Note over D: Compute new value<br/>y = 6<br/>BUFFER IT
+    Note over D: Compute new value y=6 and BUFFER IT
     
     D->>M: GlitchFreeCommitAck
     
@@ -184,7 +187,7 @@ sequenceDiagram
     
     M->>D: GlitchFreeCommit
     
-    Note over D: NOW publish<br/>buffered value
+    Note over D: NOW publish buffered value
     
     D->>D: Publish y = 6
     M->>C: TransactionCommitted
@@ -370,9 +373,13 @@ The system would deadlock with this circular dependency:
 
 ```mermaid
 graph LR
-    A[Manager waits for<br/>GlitchFreeCommitAck] --> B[DefActor needs<br/>PropChange to compute]
-    B --> C[VarActor publishes<br/>PropChange on LockRelease]
-    C --> D[Manager sends<br/>LockRelease after Acks]
+    A["Manager waits for
+    GlitchFreeCommitAck"] --> B["DefActor needs
+    PropChange to compute"]
+    B --> C["VarActor publishes
+    PropChange on LockRelease"]
+    C --> D["Manager sends
+    LockRelease after Acks"]
     D --> A
     
     style A fill:#ffcccc
@@ -524,21 +531,33 @@ graph TB
     end
     
     subgraph "Coordination Layer"
-        Manager[Manager Actor<br/>- Transaction coordination<br/>- Lock management<br/>- Glitch-free coordination]
+        Manager["Manager Actor
+        Transaction coordination
+        Lock management
+        Glitch-free coordination"]
     end
     
     subgraph "Data Layer"
-        VarX[VarActor: x<br/>- State storage<br/>- Lock handling<br/>- PropChange publishing]
+        VarX["VarActor: x
+        State storage
+        Lock handling
+        PropChange publishing"]
         VarY[VarActor: y]
     end
     
     subgraph "Computation Layer"
-        DefA[DefActor: a<br/>- Reactive computation<br/>- Buffering (if @glitchfree)<br/>- Dependency tracking]
-        DefB[DefActor: b<br/>@glitchfree]
+        DefA["DefActor: a
+        Reactive computation
+        Buffering if @glitchfree
+        Dependency tracking"]
+        DefB["DefActor: b
+        @glitchfree"]
     end
     
     subgraph "Communication Layer"
-        PubSub[PubSub System<br/>- Subscription management<br/>- Message routing]
+        PubSub["PubSub System
+        Subscription management
+        Message routing"]
     end
     
     Test --> Manager
@@ -567,7 +586,7 @@ sequenceDiagram
     participant Client
     participant Manager
     participant VarActor
-    participant DefActor<br/>@glitchfree
+    participant DefActor_GF as DefActor @glitchfree
     participant PubSub
     
     Note over Client,PubSub: Phase 1: Transaction Initiation
@@ -584,16 +603,16 @@ sequenceDiagram
     Note over Client,PubSub: Phase 3: Lock Release & Propagation
     Manager->>VarActor: LockRelease
     VarActor->>PubSub: PropChange { x = 5 }
-    PubSub->>DefActor: PropChange { x = 5 }
+    PubSub->>DefActor_GF: PropChange { x = 5 }
     
     Note over Client,PubSub: Phase 4: Buffering & Acknowledgment
-    DefActor->>DefActor: Compute y = 6<br/>BUFFER (don't publish)
-    DefActor->>Manager: GlitchFreeCommitAck
+    DefActor_GF->>DefActor_GF: Compute y=6 and BUFFER
+    DefActor_GF->>Manager: GlitchFreeCommitAck
     
     Note over Client,PubSub: Phase 5: Coordinated Commit
     Manager->>Manager: All Acks received?
-    Manager->>DefActor: GlitchFreeCommit
-    DefActor->>PubSub: PropChange { y = 6 }
+    Manager->>DefActor_GF: GlitchFreeCommit
+    DefActor_GF->>PubSub: PropChange { y = 6 }
     Manager->>Client: TransactionCommitted
     
     Note over Client,PubSub: ✅ Transaction Complete
@@ -754,6 +773,3 @@ This feature brings database-like consistency guarantees to reactive programming
 
 ---
 
-**Report prepared by**: AI Assistant  
-**Reviewed with**: Development Team  
-**For**: Supervisor Review
