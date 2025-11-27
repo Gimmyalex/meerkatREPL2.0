@@ -94,6 +94,22 @@ impl kameo::prelude::Message<Msg> for DefActor {
                 Msg::Unit
             }
 
+            Msg::TestRequestPred {
+                from_mgr_addr,
+                test_id,
+            } => {
+                let preds = self.state.get_all_applied_txns();
+                // Pick the latest one
+                let pred_id = preds.iter().max_by_key(|t| &t.id).map(|t| t.id.clone());
+                
+                let _ = from_mgr_addr.tell(Msg::TestRequestPredGranted {
+                    from_name: self.name.clone(),
+                    test_id,
+                    pred_id,
+                }).await;
+                Msg::Unit
+            }
+
             Msg::TestReadDefRequest { 
                 from_mgr_addr, 
                 test_id, 

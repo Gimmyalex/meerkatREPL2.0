@@ -209,6 +209,16 @@ impl kameo::prelude::Message<Msg> for Manager {
                 Msg::Unit
             }
 
+            Msg::TestRequestPredGranted { from_name, test_id, pred_id } => {
+                info!("TestRequestPredGranted from {} for test {:?}", from_name, test_id);
+                self.add_grant_pred(test_id, from_name, pred_id);
+                
+                if self.all_pred_granted(test_id) {
+                    let _ = self.request_assertion_result(test_id).await;
+                }
+                Msg::Unit
+            }
+
             Msg::TestReadDefResult { test_id, result } => {
                 let _ = self.on_test_finish(test_id, result).await;
                 Msg::Unit
@@ -220,25 +230,37 @@ impl kameo::prelude::Message<Msg> for Manager {
                 self.add_finished_write(&txn_id, name);
 
                 if self.all_write_finished(&txn_id) {
-                    println!("[DEBUG Manager] All writes finished for txn {:?}, releasing locks", txn_id);
+                    println!("[DEBUG Manager] All writes finished for txn {:?}", txn_id);
+                    
+                    // ALWAYS release locks (this publishes PropChange which glitch-free defs need)
+                    println!("[DEBUG Manager] Releasing locks for txn {:?}", txn_id);
                     let _ = self.release_locks(&txn_id).await;
-
-                    info!("release all locks, send commit transaction");
-                    let client_sender = self.get_client_sender(&txn_id);
-                    client_sender
-                        .send(CmdMsg::TransactionCommitted {
-                            txn_id: txn_id.clone(),
-                            writes: self
-                                .txn_mgrs
-                                .get(&txn_id)
-                                .unwrap()
-                                .writes
-                                .keys()
-                                .cloned()
-                                .collect(),
-                        })
-                        .await
-                        .unwrap();
+                    
+                    // Check if there's a glitch-free coordinator for this txn
+                    if self.glitchfree_coordinators.contains_key(&txn_id) {
+                        println!("[DEBUG Manager] Glitch-free coordinator exists for txn {:?}, waiting for Acks before committing transaction", txn_id);
+                        // Locks are released (PropChange published), but DON'T send TransactionCommitted yet
+                        // The GlitchFreeCommitAck handler will send TransactionCommitted after all Acks received
+                    } else {
+                        // No glitch-free defs involved - send TransactionCommitted immediately
+                        println!("[DEBUG Manager] No glitch-free coordinator for txn {:?}, committing transaction immediately", txn_id);
+                        info!("release all locks, send commit transaction");
+                        let client_sender = self.get_client_sender(&txn_id);
+                        client_sender
+                            .send(CmdMsg::TransactionCommitted {
+                                txn_id: txn_id.clone(),
+                                writes: self
+                                    .txn_mgrs
+                                    .get(&txn_id)
+                                    .unwrap()
+                                    .writes
+                                    .keys()
+                                    .cloned()
+                                    .collect(),
+                            })
+                            .await
+                            .unwrap();
+                    }
                 } else {
                     println!("[DEBUG Manager] Not all writes finished yet for txn {:?}", txn_id);
                 }
@@ -309,6 +331,7 @@ impl kameo::prelude::Message<Msg> for Manager {
                 if should_commit {
                     // Get the list of defs to commit before removing coordinator
                     let defs_to_commit = if let Some(coordinator) = self.glitchfree_coordinators.remove(&txn_id) {
+                        println!("[DEBUG Manager] All Acks received for txn {:?}! Committing all glitch-free defs simultaneously", txn_id);
                         info!("All Acks received for txn {:?}! Committing all glitch-free defs simultaneously", txn_id);
                         coordinator.expected_acks
                     } else {
@@ -318,12 +341,33 @@ impl kameo::prelude::Message<Msg> for Manager {
                         set
                     };
                     
-                    // Now commit all (no longer holding mutable borrow)
+                    // Send Commit messages to all glitch-free defs
                     for def_name in &defs_to_commit {
+                        println!("[DEBUG Manager] Sending GlitchFreeCommit to {} for txn {:?}", def_name, txn_id);
                         let _ = self.tell_to_name(def_name, Msg::GlitchFreeCommit { 
                             txn_id: txn_id.clone() 
                         }).await;
                     }
+                    
+                    // Locks were already released in UsrWriteVarFinish handler
+                    // Now send TransactionCommitted to complete the transaction
+                    println!("[DEBUG Manager] All glitch-free commits sent, now sending TransactionCommitted for txn {:?}", txn_id);
+                    info!("send commit transaction");
+                    let client_sender = self.get_client_sender(&txn_id);
+                    client_sender
+                        .send(CmdMsg::TransactionCommitted {
+                            txn_id: txn_id.clone(),
+                            writes: self
+                                .txn_mgrs
+                                .get(&txn_id)
+                                .unwrap()
+                                .writes
+                                .keys()
+                                .cloned()
+                                .collect(),
+                        })
+                        .await
+                        .unwrap();
                 }
                 
                 Msg::Unit
