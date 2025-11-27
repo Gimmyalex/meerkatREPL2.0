@@ -107,15 +107,15 @@ impl Manager {
             .insert(name.clone(), actor_ref.clone());
 
         // subscribe to its dependencies
-        // println!("{} subscribe to {:?}", name, def_args);
-        for name in def_args.iter() {
-            // println!("{}", name);
+        println!("[DEBUG alloc_def_actor] {} subscribing to dependencies: {:?}", name, def_args);
+        for dep_name in def_args.iter() {
+            println!("[DEBUG alloc_def_actor] {} subscribing to {}", name, dep_name);
             // synchronously wait for response
             let back_msg = self
                 .ask_to_name(
-                    name,
+                    dep_name,
                     Msg::Subscribe {
-                        from_name: name.clone(),
+                        from_name: dep_name.clone(),
                         from_addr: actor_ref.clone(),
                     },
                 )
@@ -126,6 +126,7 @@ impl Manager {
             }
 
             actor_ref.tell(back_msg).await?;
+            println!("[DEBUG alloc_def_actor] {} successfully subscribed to {}", name, dep_name);
         }
 
         Ok(actor_ref)

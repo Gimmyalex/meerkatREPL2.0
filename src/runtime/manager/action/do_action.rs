@@ -232,6 +232,7 @@ impl Manager {
         names.extend(txn_mgr.writes.keys());
 
         for name in names {
+            println!("[DEBUG Manager] Sending LockRelease to {} for txn {:?}", name, txn_id);
             self.tell_to_name(
                 &name,
                 Msg::LockRelease {

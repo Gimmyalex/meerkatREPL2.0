@@ -30,9 +30,11 @@ impl kameo::prelude::Message<CmdMsg> for Manager {
             }
 
             DoAction { from_client_addr, txn_id, action } => {
+                println!("[DEBUG] DoAction received! txn_id: {:?}", txn_id);
                 info!("Do Action");
                 // todo better modularity here
                 if let Ok((assns, inserts)) = self.eval_action(action.clone()) {
+                    println!("[DEBUG] Action evaluated. assns: {:?}, inserts: {:?}", assns, inserts);
                     // let txn_mgr = self.new_txn(
                     //     txn_id.clone(),
                     //     assns.clone(),
@@ -139,26 +141,19 @@ impl kameo::prelude::Message<Msg> for Manager {
                 lock,
                 pred_id,
             } => {
+                println!("[DEBUG Manager] LockGranted from {} for {:?}", from_name, lock);
                 info!("Lock Granted");
                 self.add_grant_lock(&lock.txn_id, from_name, lock.lock_kind, pred_id);
                 if self.all_lock_granted(&lock.txn_id) {
+                    println!("[DEBUG Manager] All locks granted for txn {:?}, requesting reads", lock.txn_id);
                     info!("all lock granted");
                     let _ = self.request_reads(&lock.txn_id).await;
-                    info!("all read requested");
-                }
-
-                Msg::Unit
-            }
-
-            Msg::TestRequestPredGranted {
-                from_name,
-                test_id,
-                pred_id,
-            } => {
-                self.add_grant_pred(test_id, from_name, pred_id);
-
-                if self.all_pred_granted(test_id) {
-                    let _ = self.request_assertion_result(test_id).await;
+                    
+                    // CRITICAL FIX: For transactions with NO reads, immediately trigger writes
+                    if self.all_read_finished(&lock.txn_id) {
+                        println!("[DEBUG Manager] No reads needed for txn {:?}, immediately requesting writes", lock.txn_id);
+                        let _ = self.reeval_and_request_writes(&lock.txn_id).await;
+                    }
                 }
 
                 Msg::Unit
@@ -220,10 +215,12 @@ impl kameo::prelude::Message<Msg> for Manager {
             }
 
             Msg::UsrWriteVarFinish { txn: txn_id, name } => {
+                println!("[DEBUG Manager] Received UsrWriteVarFinish from {} for txn {:?}", name, txn_id);
                 info!("UsrWriteVarFinish");
                 self.add_finished_write(&txn_id, name);
 
                 if self.all_write_finished(&txn_id) {
+                    println!("[DEBUG Manager] All writes finished for txn {:?}, releasing locks", txn_id);
                     let _ = self.release_locks(&txn_id).await;
 
                     info!("release all locks, send commit transaction");
@@ -242,6 +239,8 @@ impl kameo::prelude::Message<Msg> for Manager {
                         })
                         .await
                         .unwrap();
+                } else {
+                    println!("[DEBUG Manager] Not all writes finished yet for txn {:?}", txn_id);
                 }
                 Msg::Unit
             }

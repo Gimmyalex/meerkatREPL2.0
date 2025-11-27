@@ -178,17 +178,22 @@ impl DefActor {
 
         // if we search for new batch of changes
         let changes = self.state.search_batch();
+        println!("[DEBUG DefActor {}] Search batch found: {:?}", self.name, changes);
         info!("{:?} Search batch found: {:?}", self.name, changes);
         if changes.len() > 0 {
             self.value = self.state.apply_batch(&changes);
+            println!("[DEBUG DefActor {}] Successfully applied batch, new value: {}", self.name, self.value);
             info!("{:?} Successfully apply batch function, got new value: {}", self.name, self.value);
             let preds = self.state.get_preds_of_changes(&changes);
 
             if self.is_glitch_free {
+                println!("[DEBUG DefActor {}] is glitch-free, buffering output. Preds: {:?}", self.name, preds);
                 // Buffer the output and send Ack to Manager
                 for pred_txn in preds.iter() {
+                    println!("[DEBUG DefActor {}] Buffering for txn {:?}", self.name, pred_txn.id);
                     self.buffered_outputs.insert(pred_txn.id.clone(), (self.value.clone().into(), preds.clone()));
                     
+                    println!("[DEBUG DefActor {}] Sending GlitchFreeCommitAck to Manager for txn {:?}", self.name, pred_txn.id);
                     let _ = self.manager_addr.tell(Msg::GlitchFreeCommitAck {
                         txn_id: pred_txn.id.clone(),
                         name: self.name.clone(),

@@ -1,0 +1,10 @@
+service basic_glitchfree {
+    var x = 0;
+    @glitchfree def y = x + 1;
+    pub def set_x_5 = action { x = 5; };
+}
+
+@test(basic_glitchfree) {
+    do set_x_5;
+    assert(y == 6);
+}

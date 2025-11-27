@@ -44,6 +44,7 @@ impl kameo::prelude::Message<Msg> for VarActor {
                 lock,
                 from_mgr_addr: from_name,
             } => {
+                println!("[DEBUG VarActor {}] Lock Request from {:?} {:?}", self.name, from_name, lock);
                 info!("Lock Request from {:?} {:?}", from_name, lock);
                 if !self.lock_state.add_wait(lock.clone(), from_name.clone()) {
                     info!("Aborted {:?}", lock);
@@ -85,6 +86,7 @@ impl kameo::prelude::Message<Msg> for VarActor {
             }
 
             Msg::LockRelease { txn, mut preds } => {
+                println!("[DEBUG VarActor {}] Lock Release for txn {:?}", self.name, txn.id);
                 info!("Lock Release for txn {:?}", txn.id);
                 assert!(
                     self.lock_state.has_granted(&txn.id),
@@ -112,6 +114,7 @@ impl kameo::prelude::Message<Msg> for VarActor {
                     // value is updated
                     preds.insert(txn.clone());
 
+                    println!("[DEBUG VarActor {}] Publishing PropChange", self.name);
                     self.pubsub
                         .publish(Msg::PropChange {
                             from_name: self.name.clone(),
@@ -149,6 +152,7 @@ impl kameo::prelude::Message<Msg> for VarActor {
                 txn,
                 write_val,
             } => {
+                println!("[DEBUG VarActor {}] UsrWriteVarRequest for txn {:?}", self.name, txn);
                 info!("UsrWriteVarRequest");
                 assert!(self.lock_state.has_granted_write(&txn));
 
@@ -215,8 +219,10 @@ impl Actor for VarActor {
 
 impl VarActor {
     async fn tick(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        println!("[DEBUG VarActor {}] tick() called", self.name);
         // if can grant new waiting lock
         if let Some((lock, mgr)) = self.lock_state.grant_oldest_wait() {
+            println!("[DEBUG VarActor {}] Granting lock {:?} to manager", self.name, lock);
             assert!(self.lock_state.has_granted(&lock.txn_id));
             info!("{:?} grant {:?} to manager {}", self.name, lock, mgr.id());
 
@@ -227,6 +233,8 @@ impl VarActor {
             };
 
             let _ = mgr.tell(msg).await?;
+        } else {
+            println!("[DEBUG VarActor {}] No locks to grant in tick", self.name);
         }
         Ok(())
     }
