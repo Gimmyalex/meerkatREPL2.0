@@ -16,6 +16,7 @@
 <decl> ::=
 | var <ident> = <expr>;
 | def <ident> = <expr>;
+| @glitchfree def <ident> = <expr>;  // Glitch-free derived variable
 | pub def <ident> = <expr>;
 | import <ident>    // import var/defs from other services
 <decls> ::= <decl>*
@@ -126,5 +127,91 @@ each service has a unique manager, who managing all the ```def``` and ```var```'
 
 ### Distributed System Protocol
 
+
+## Glitch-Free Protocol
+
+### Overview
+Meerkat 2.0 now supports **glitch-free derived variables** through the `@glitchfree` annotation. This feature ensures that derived variables update atomically during transactions, preventing intermediate inconsistent states (glitches) from being observed.
+
+### What is a Glitch?
+A glitch occurs when a derived variable temporarily shows an inconsistent value during a multi-variable update. For example:
+
+```meerkat
+var a = 1;
+var b = 1;
+def sum = a + b;  // sum = 2
+
+// Transaction: set a=2, b=2
+// Without glitch-free: sum might temporarily show 3 (a=2, b=1)
+// With glitch-free: sum atomically updates from 2 to 4
+```
+
+### Usage
+
+Mark derived variables with `@glitchfree` to enable atomic updates:
+
+```meerkat
+service example {
+    var x = 0;
+    @glitchfree def y = x + 1;
+    pub def set_x = action { x = 5; };
+}
+```
+
+### How It Works
+
+The glitch-free protocol uses a two-phase commit approach:
+
+1. **Buffer Phase**: When a transaction modifies variables, glitch-free defs compute new values but buffer them (don't publish)
+2. **Acknowledgment**: Glitch-free defs send acknowledgments to the Manager
+3. **Commit Phase**: Once all acknowledgments are received, the Manager sends commit messages
+4. **Atomic Update**: All glitch-free defs publish their buffered values simultaneously
+
+```mermaid
+sequenceDiagram
+    participant M as Manager
+    participant V as VarActor
+    participant D as DefActor (@glitchfree)
+    
+    M->>V: Write x=5
+    V->>M: WriteFinish
+    M->>V: LockRelease
+    V->>D: PropChange
+    D->>D: Compute & Buffer
+    D->>M: GlitchFreeCommitAck
+    M->>D: GlitchFreeCommit
+    D->>D: Publish buffered value
+```
+
+### Testing
+
+Run the glitch-free test:
+```bash
+cargo run -- -f tests/test_basic_glitchfree.meerkat
+```
+
+Expected output:
+```
+pass test y == 6
+testing basic_glitchfree finished
+```
+
+### Implementation Details
+
+For a comprehensive technical report including architecture, challenges solved, and implementation journey, see:
+- **[GLITCH_FREE_PROTOCOL_REPORT.md](./GLITCH_FREE_PROTOCOL_REPORT.md)** - Complete technical documentation
+
+**Key Files:**
+- `src/runtime/manager/handler.rs` - Transaction coordination
+- `src/runtime/def_actor/handler.rs` - Buffering and commit logic
+- `src/runtime/manager/glitchfree.rs` - Dependency analysis
+- `tests/test_basic_glitchfree.meerkat` - Test specification
+
+### Benefits
+
+✅ **Consistency**: Derived variables never show intermediate states  
+✅ **Atomicity**: Multi-variable updates appear instantaneous  
+✅ **Correctness**: Eliminates a class of subtle timing bugs  
+✅ **Opt-in**: Only affects variables marked `@glitchfree`
 
 
