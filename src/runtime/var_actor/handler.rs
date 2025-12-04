@@ -114,12 +114,27 @@ impl kameo::prelude::Message<Msg> for VarActor {
                     // value is updated
                     preds.insert(txn.clone());
 
-                    println!("[DEBUG VarActor {}] Publishing PropChange", self.name);
+                    // NEW: Increment iteration on write
+                    self.iteration = self.iteration.increment();
+                    
+                    // NEW: Create BasisStamp for this variable
+                    let mut basis = crate::runtime::message::BasisStamp::empty();
+                    basis.add(
+                        crate::runtime::message::ReactiveAddress {
+                            service_name: "default".to_string(),  // TODO: get actual service name
+                            var_name: self.name.clone(),
+                        },
+                        self.iteration,
+                    );
+
+                    println!("[DEBUG VarActor {}] Publishing PropChange with iteration {:?}", 
+                             self.name, self.iteration);
                     self.pubsub
                         .publish(Msg::PropChange {
                             from_name: self.name.clone(),
                             val: new_value,
                             preds: preds.clone(),
+                            basis,  // NEW: proper BasisStamp with iteration
                         })
                         .await;
                 }

@@ -51,16 +51,18 @@ impl kameo::prelude::Message<CmdMsg> for Manager {
                     
                     let affected_glitchfree = self.compute_affected_glitchfree(&written_vars);
                     
-                    if !affected_glitchfree.is_empty() {
-                        use crate::runtime::manager::GlitchFreeCoordinator;
-                        let coordinator = GlitchFreeCoordinator {
-                            txn_id: txn_id.clone(),
-                            expected_acks: affected_glitchfree,
-                            received_acks: HashSet::new(),
-                        };
-                        self.glitchfree_coordinators.insert(txn_id.clone(), coordinator);
-                        info!("Created glitch-free coordinator for txn {:?}", txn_id);
-                    }
+                    // NOTE: Coordinator creation removed - DefActors now handle coordination via basis checking
+                    // if !affected_glitchfree.is_empty() {
+                    //     use crate::runtime::manager::GlitchFreeCoordinator;
+                    //     let coordinator = GlitchFreeCoordinator {
+                    //         txn_id: txn_id.clone(),
+                    //         expected_acks: affected_glitchfree,
+                    //         received_acks: HashSet::new(),
+                    //     };
+                    //     self.glitchfree_coordinators.insert(txn_id.clone(), coordinator);
+                    //     info!("Created glitch-free coordinator for txn {:?}", txn_id);
+                    // }
+
 
                     if inserts.is_empty() {
                         info!("No inserts to process");
@@ -102,10 +104,10 @@ impl kameo::prelude::Message<CmdMsg> for Manager {
             TransactionAborted { txn_id } => {
                 info!("Transaction Aborted");
                 
-                // Clean up glitch-free coordinator if exists
-                if self.glitchfree_coordinators.remove(&txn_id).is_some() {
-                    info!("Cleaned up glitch-free coordinator for aborted txn {:?}", txn_id);
-                }
+                // NOTE: Coordinator cleanup removed - no longer needed
+                // if self.glitchfree_coordinators.remove(&txn_id).is_some() {
+                //     info!("Cleaned up glitch-free coordinator for aborted txn {:?}", txn_id);
+                // }
                 
                 let client_sender = self.get_client_sender(&txn_id);
                 client_sender.send(CmdMsg::TransactionAborted { txn_id }).await.unwrap();
@@ -236,31 +238,26 @@ impl kameo::prelude::Message<Msg> for Manager {
                     println!("[DEBUG Manager] Releasing locks for txn {:?}", txn_id);
                     let _ = self.release_locks(&txn_id).await;
                     
-                    // Check if there's a glitch-free coordinator for this txn
-                    if self.glitchfree_coordinators.contains_key(&txn_id) {
-                        println!("[DEBUG Manager] Glitch-free coordinator exists for txn {:?}, waiting for Acks before committing transaction", txn_id);
-                        // Locks are released (PropChange published), but DON'T send TransactionCommitted yet
-                        // The GlitchFreeCommitAck handler will send TransactionCommitted after all Acks received
-                    } else {
-                        // No glitch-free defs involved - send TransactionCommitted immediately
-                        println!("[DEBUG Manager] No glitch-free coordinator for txn {:?}, committing transaction immediately", txn_id);
-                        info!("release all locks, send commit transaction");
-                        let client_sender = self.get_client_sender(&txn_id);
-                        client_sender
-                            .send(CmdMsg::TransactionCommitted {
-                                txn_id: txn_id.clone(),
-                                writes: self
-                                    .txn_mgrs
-                                    .get(&txn_id)
-                                    .unwrap()
-                                    .writes
-                                    .keys()
-                                    .cloned()
-                                    .collect(),
-                            })
-                            .await
-                            .unwrap();
-                    }
+                    // NOTE: Coordinator check removed - DefActors now handle coordination via basis checking
+                    // We always commit immediately after releasing locks
+                    // DefActors will use basis checking to ensure glitch-freedom
+                    println!("[DEBUG Manager] Committing transaction {:?} immediately (DefActors handle glitch-freedom)", txn_id);
+                    info!("release all locks, send commit transaction");
+                    let client_sender = self.get_client_sender(&txn_id);
+                    client_sender
+                        .send(CmdMsg::TransactionCommitted {
+                            txn_id: txn_id.clone(),
+                            writes: self
+                                .txn_mgrs
+                                .get(&txn_id)
+                                .unwrap()
+                                .writes
+                                .keys()
+                                .cloned()
+                                .collect(),
+                        })
+                        .await
+                        .unwrap();
                 } else {
                     println!("[DEBUG Manager] Not all writes finished yet for txn {:?}", txn_id);
                 }
@@ -309,6 +306,16 @@ impl kameo::prelude::Message<Msg> for Manager {
                 Msg::Unit
             }
 
+
+            // NOTE: GlitchFreeCommitAck handler removed - DefActors now handle coordination locally
+            // DefActors no longer send Acks; they use basis checking to coordinate
+            Msg::GlitchFreeCommitAck { txn_id, name } => {
+                // This handler is no longer used with distributed basis checking
+                info!("WARNING: Received unexpected GlitchFreeCommitAck from {} for txn {:?} - this should not happen with basis checking", name, txn_id);
+                Msg::Unit
+            }
+            
+            /* OLD COORDINATOR CODE - REMOVED
             Msg::GlitchFreeCommitAck { txn_id, name } => {
                 info!("Received GlitchFreeCommitAck from {} for txn {:?}", name, txn_id);
                 
@@ -372,6 +379,7 @@ impl kameo::prelude::Message<Msg> for Manager {
                 
                 Msg::Unit
             }
+            */
 
             _ => panic!("Manager should not receive message from var/def actors"),
         }

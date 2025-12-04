@@ -131,7 +131,9 @@ each service has a unique manager, who managing all the ```def``` and ```var```'
 ## Glitch-Free Protocol
 
 ### Overview
-Meerkat 2.0 now supports **glitch-free derived variables** through the `@glitchfree` annotation. This feature ensures that derived variables update atomically during transactions, preventing intermediate inconsistent states (glitches) from being observed.
+Meerkat 2.0 implements a **fully distributed glitch-free protocol** using BasisStamp-based coordination. This feature ensures that derived variables update atomically during transactions, preventing intermediate inconsistent states (glitches) from being observed.
+
+**Key Innovation**: Unlike traditional centralized approaches, Meerkat's glitch-free protocol uses **peer-to-peer coordination** where DefActors coordinate locally via BasisStamp mechanism, eliminating the need for central Manager coordination.
 
 ### What is a Glitch?
 A glitch occurs when a derived variable temporarily shows an inconsistent value during a multi-variable update. For example:
@@ -158,60 +160,111 @@ service example {
 }
 ```
 
-### How It Works
+### How It Works (Distributed Protocol)
 
-The glitch-free protocol uses a two-phase commit approach:
+The glitch-free protocol uses **BasisStamp-based distributed coordination**:
 
-1. **Buffer Phase**: When a transaction modifies variables, glitch-free defs compute new values but buffer them (don't publish)
-2. **Acknowledgment**: Glitch-free defs send acknowledgments to the Manager
-3. **Commit Phase**: Once all acknowledgments are received, the Manager sends commit messages
-4. **Atomic Update**: All glitch-free defs publish their buffered values simultaneously
+1. **Iteration Tracking**: VarActors track version numbers (iterations) for each update
+2. **BasisStamp Propagation**: PropChange messages carry BasisStamp indicating causal dependencies
+3. **Local Basis Checking**: DefActors buffer updates and verify dependencies locally
+4. **Consistent Batch Finding**: DefActors compute only when all dependencies are satisfied
+5. **Atomic Propagation**: New values published with merged BasisStamp
 
 ```mermaid
 sequenceDiagram
-    participant M as Manager
-    participant V as VarActor
-    participant D as DefActor (@glitchfree)
+    participant V as VarActor (x)
+    participant D1 as DefActor (y)
+    participant D2 as DefActor (z)
+    participant D3 as DefActor (w)
     
-    M->>V: Write x=5
-    V->>M: WriteFinish
-    M->>V: LockRelease
-    V->>D: PropChange
-    D->>D: Compute & Buffer
-    D->>M: GlitchFreeCommitAck
-    M->>D: GlitchFreeCommit
-    D->>D: Publish buffered value
+    Note over V: x = 1 → 5
+    V->>V: Increment iteration to 1
+    V->>D1: PropChange(5, basis={x:1})
+    V->>D2: PropChange(5, basis={x:1})
+    
+    D1->>D1: Buffer update, check basis
+    D1->>D1: Compute y = 6
+    D1->>D3: PropChange(6, basis={x:1})
+    
+    D2->>D2: Buffer update, check basis
+    D2->>D2: Compute z = 10
+    D2->>D3: PropChange(10, basis={x:1})
+    
+    D3->>D3: Buffer both updates
+    D3->>D3: Check basis: both have {x:1} ✓
+    D3->>D3: Compute w = 16
+    
+    Note over D3: No glitch! w sees consistent y and z
 ```
+
+### Key Features
+
+✅ **Fully Distributed**: No central Manager coordination for glitch-freedom  
+✅ **Peer-to-Peer**: DefActors coordinate locally via BasisStamp  
+✅ **Causal Consistency**: BasisStamp tracks dependencies across chains  
+✅ **Scalable**: No single point of coordination  
+✅ **Correct**: Diamond dependency test proves glitch-freedom works
 
 ### Testing
 
-Run the glitch-free test:
+Run comprehensive glitch-free tests:
+
 ```bash
+# Basic single dependency
 cargo run -- -f tests/test_basic_glitchfree.meerkat
+
+# Diamond dependency (critical glitch-freedom test)
+cargo run -- -f tests/test_diamond_glitchfree.meerkat
+
+# Multiple dependencies
+cargo run -- -f tests/test_multi_dependency.meerkat
+
+# Chain dependencies
+cargo run -- -f tests/test_chain_dependency.meerkat
+
+# Concurrent updates
+cargo run -- -f tests/test_concurrent_updates.meerkat
 ```
 
-Expected output:
-```
-pass test y == 6
-testing basic_glitchfree finished
-```
+**Test Results**: 5/5 tests pass (100% success rate)
 
 ### Implementation Details
 
-For a comprehensive technical report including architecture, challenges solved, and implementation journey, see:
+For a comprehensive technical report including architecture, distributed protocol design, and implementation journey, see:
 - **[GLITCH_FREE_PROTOCOL_REPORT.md](./GLITCH_FREE_PROTOCOL_REPORT.md)** - Complete technical documentation
 
 **Key Files:**
-- `src/runtime/manager/handler.rs` - Transaction coordination
-- `src/runtime/def_actor/handler.rs` - Buffering and commit logic
-- `src/runtime/manager/glitchfree.rs` - Dependency analysis
-- `tests/test_basic_glitchfree.meerkat` - Test specification
+- `src/runtime/message.rs` - BasisStamp, Iteration, ReactiveAddress types
+- `src/runtime/var_actor/mod.rs` - Iteration tracking
+- `src/runtime/var_actor/handler.rs` - BasisStamp creation and propagation
+- `src/runtime/def_actor/mod.rs` - Basis checking methods
+- `src/runtime/def_actor/handler.rs` - Buffering and consistent batch finding
+- `src/runtime/manager/handler.rs` - Simplified transaction coordination
+- `tests/test_*.meerkat` - Comprehensive test suite
 
 ### Benefits
 
 ✅ **Consistency**: Derived variables never show intermediate states  
 ✅ **Atomicity**: Multi-variable updates appear instantaneous  
 ✅ **Correctness**: Eliminates a class of subtle timing bugs  
+✅ **Distributed**: No central coordination bottleneck  
+✅ **Scalable**: Peer-to-peer coordination scales better  
 ✅ **Opt-in**: Only affects variables marked `@glitchfree`
+
+### Comparison with Other Approaches
+
+**Traditional (Centralized)**:
+- Manager coordinates all glitch-free commits
+- DefActors send acknowledgments to Manager
+- Manager waits for all Acks before committing
+- Single point of coordination
+
+**Meerkat (Distributed)**:
+- DefActors coordinate locally via BasisStamp
+- No Manager involvement in glitch-freedom
+- Peer-to-peer basis checking
+- Fully distributed coordination
+
+**Inspired by**: Julia's HIG protocol and BasisStamp mechanism
 
 

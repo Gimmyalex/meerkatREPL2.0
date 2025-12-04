@@ -60,6 +60,7 @@ impl kameo::prelude::Message<Msg> for TableActor {
                         from_name: self.name.clone(), 
                         val: insert.row.clone(), // only send new record
                         preds: HashSet::from([txn.clone()]), // the only pred is reflexively itself
+                        basis: crate::runtime::message::BasisStamp::empty(),  // Tables don't track iterations
                     })
                     .await;
                 info!("Prop change message sent to subscribers");

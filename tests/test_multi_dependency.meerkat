@@ -1,0 +1,17 @@
+// Multiple Dependencies Test
+// Tests that a def can correctly depend on multiple variables
+// and basis checking waits for all inputs before computing
+
+service multi_dep {
+    var x = 1;
+    var y = 2;
+    
+    @glitchfree def z = x + y;
+    
+    pub def update_both = action { x = 5; y = 3; };
+}
+
+@test(multi_dep) {
+    do update_both;
+    assert(z == 8);
+}

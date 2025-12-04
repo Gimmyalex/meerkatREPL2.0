@@ -1,0 +1,19 @@
+// Concurrent Updates Test
+// Tests that basis checking handles simultaneous updates to multiple variables
+// Verifies each def sees a coherent snapshot of inputs
+
+service concurrent {
+    var x = 1;
+    var y = 1;
+    
+    @glitchfree def sum = x + y;
+    @glitchfree def product = x * y;
+    
+    pub def update_both = action { x = 5; y = 10; };
+}
+
+@test(concurrent) {
+    do update_both;
+    assert(sum == 15);
+    assert(product == 50);
+}

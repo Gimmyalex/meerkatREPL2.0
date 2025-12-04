@@ -124,8 +124,31 @@ impl kameo::prelude::Message<Msg> for DefActor {
                 from_name,
                 val,
                 preds,
+                basis,
             } => {
+                println!("[DefActor {}] Received PropChange from {} with basis: {:?}", 
+                         self.name, from_name, basis);
+                
+                // NEW: Buffer the update with its BasisStamp
+                let stamped_value = crate::runtime::def_actor::StampedValue {
+                    value: val.clone(),
+                    basis: basis.clone(),
+                };
+                
+                self.input_buffers
+                    .entry(from_name.clone())
+                    .or_insert_with(Vec::new)
+                    .push(stamped_value);
+                
+                println!("[DefActor {}] Buffered update from {}, trying to compute...", 
+                         self.name, from_name);
+                
+                // Also update the old state for compatibility
                 self.state.receive_change(from_name, val, preds);
+                
+                // Try to compute with new inputs using basis checking
+                self.try_compute_next_value().await;
+                
                 Msg::Unit
             }
 
@@ -135,6 +158,7 @@ impl kameo::prelude::Message<Msg> for DefActor {
                         from_name: self.name.clone(),
                         val,
                         preds,
+                        basis: crate::runtime::message::BasisStamp::empty(),  // TODO: compute proper basis
                     };
                     self.pubsub.publish(msg).await;
                 }
@@ -202,6 +226,20 @@ impl DefActor {
             info!("{:?} Successfully apply batch function, got new value: {}", self.name, self.value);
             let preds = self.state.get_preds_of_changes(&changes);
 
+            // NOTE: Glitch-free buffering and Ack sending removed - DefActors now use basis checking
+            // With distributed basis checking, DefActors propagate immediately
+            // Glitch-freedom is ensured by the basis checking logic in try_compute_next_value()
+            
+            // Always propagate immediately (basis checking handles glitch-freedom)
+            let msg = Msg::PropChange {
+                from_name: self.name.clone(),
+                val: self.value.clone().into(),
+                preds,
+                basis: self.current_basis.clone(),  // Use the basis we computed
+            };
+            self.pubsub.publish(msg).await;
+            
+            /* OLD GLITCH-FREE COORDINATOR CODE - REMOVED
             if self.is_glitch_free {
                 println!("[DEBUG DefActor {}] is glitch-free, buffering output. Preds: {:?}", self.name, preds);
                 // Buffer the output and send Ack to Manager
@@ -209,7 +247,7 @@ impl DefActor {
                     println!("[DEBUG DefActor {}] Buffering for txn {:?}", self.name, pred_txn.id);
                     self.buffered_outputs.insert(pred_txn.id.clone(), (self.value.clone().into(), preds.clone()));
                     
-                    println!("[DEBUG DefActor {}] Sending GlitchFreeCommitAck to Manager for txn {:?}", self.name, pred_txn.id);
+                    println!("[DEBUG DefActor {}] Sending GlitchFreeCommitAck to Manager for txn {:?}\", self.name, pred_txn.id);
                     let _ = self.manager_addr.tell(Msg::GlitchFreeCommitAck {
                         txn_id: pred_txn.id.clone(),
                         name: self.name.clone(),
@@ -221,9 +259,11 @@ impl DefActor {
                     from_name: self.name.clone(),
                     val: self.value.clone().into(),
                     preds,
+                    basis: crate::runtime::message::BasisStamp::empty(),  // TODO: compute proper basis
                 };
                 self.pubsub.publish(msg).await;
             }
+            */
         }
 
         // if we have read request and applied its preds

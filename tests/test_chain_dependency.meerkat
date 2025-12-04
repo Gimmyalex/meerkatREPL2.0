@@ -1,0 +1,18 @@
+// Chain Dependencies Test
+// Tests that BasisStamp propagates correctly through chains
+// Verifies transitive dependencies: x -> y -> z
+
+service chain {
+    var x = 1;
+    
+    @glitchfree def y = x + 1;
+    @glitchfree def z = y * 2;
+    
+    pub def update_x = action { x = 5; };
+}
+
+@test(chain) {
+    do update_x;
+    assert(y == 6);
+    assert(z == 12);
+}

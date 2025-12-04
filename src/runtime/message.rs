@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use kameo::{actor::ActorRef, Actor, Reply};
 use tokio::sync::mpsc::Sender;
@@ -13,6 +13,68 @@ use crate::{
 };
 
 use super::{def_actor::DefActor, manager::Manager, transaction::Txn, var_actor::VarActor};
+
+// ============================================================================
+// BasisStamp Infrastructure for Distributed Glitch-Free Protocol
+// ============================================================================
+
+/// Tracks causal dependencies - which root variables at which iterations
+/// This is the key mechanism for distributed glitch-freedom
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BasisStamp {
+    pub roots: HashMap<ReactiveAddress, Iteration>,
+}
+
+/// Iteration number for a reactive variable
+/// Increments each time the variable is written
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Iteration(pub u64);
+
+/// Uniquely identifies a reactive variable across the system
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ReactiveAddress {
+    pub service_name: String,  // Service this variable belongs to
+    pub var_name: String,       // Variable name within the service
+}
+
+impl BasisStamp {
+    /// Create an empty BasisStamp with no dependencies
+    pub fn empty() -> Self {
+        BasisStamp {
+            roots: HashMap::new(),
+        }
+    }
+
+    /// Add a dependency on a specific variable at a specific iteration
+    pub fn add(&mut self, address: ReactiveAddress, iteration: Iteration) {
+        use std::collections::hash_map::Entry;
+        match self.roots.entry(address) {
+            Entry::Vacant(entry) => {
+                entry.insert(iteration);
+            }
+            Entry::Occupied(mut entry) => {
+                // Keep the maximum iteration if we see multiple updates
+                *entry.get_mut() = (*entry.get()).max(iteration);
+            }
+        }
+    }
+
+    /// Merge another BasisStamp into this one
+    /// Used when combining dependencies from multiple inputs
+    pub fn merge_from(&mut self, other: &BasisStamp) {
+        for (address, iteration) in &other.roots {
+            self.add(address.clone(), *iteration);
+        }
+    }
+}
+
+impl Iteration {
+    pub const ZERO: Iteration = Iteration(0);
+
+    pub fn increment(self) -> Iteration {
+        Iteration(self.0 + 1)
+    }
+}
 
 #[derive(Debug, Clone, Reply)]
 pub enum Msg {
@@ -131,6 +193,7 @@ pub enum Msg {
         from_name: String, // name of the var/def that is changed
         val: Expr,
         preds: HashSet<Txn>, // table probably send Hashset::new() as pred
+        basis: BasisStamp,   // NEW: tracks causal dependencies
     },
 
     // Coordinator (Manager) -> DefActor

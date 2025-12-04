@@ -22,13 +22,7 @@ pub mod handler;
 pub mod init;
 pub mod glitchfree;
 
-/// Coordinator for glitch-free transaction commits
-#[derive(Debug, Clone)]
-pub struct GlitchFreeCoordinator {
-    pub txn_id: TxnId,
-    pub expected_acks: HashSet<String>,  // Names of glitch-free defs we're waiting for
-    pub received_acks: HashSet<String>,  // Names that have Ack'd
-}
+// NOTE: GlitchFreeCoordinator removed - DefActors now handle coordination locally via basis checking
 
 #[derive(Debug)]
 pub struct Manager {
@@ -55,9 +49,9 @@ pub struct Manager {
     pub txn_mgrs: HashMap<TxnId, TxnManager>,
     pub test_mgrs: HashMap<TestId, TestManager>,
 
-    /// glitch-free coordination
+    /// glitch-free coordination (kept for tracking which defs are glitch-free)
     pub glitchfree_defs: HashSet<String>,  // Names of all glitch-free defs
-    pub glitchfree_coordinators: HashMap<TxnId, GlitchFreeCoordinator>,
+    // NOTE: glitchfree_coordinators removed - no longer needed with distributed basis checking
 }
 
 impl Manager {
@@ -81,7 +75,7 @@ impl Manager {
             test_mgrs: HashMap::new(),
 
             glitchfree_defs: HashSet::new(),
-            glitchfree_coordinators: HashMap::new(),
+            // NOTE: glitchfree_coordinators removed
         }
     }
 }

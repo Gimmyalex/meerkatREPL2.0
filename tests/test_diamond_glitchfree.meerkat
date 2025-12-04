@@ -1,0 +1,29 @@
+// Diamond Dependency Test - THE critical test for glitch-freedom
+// Tests the classic scenario where a def depends on two defs that both depend on the same var
+//
+// Dependency graph:
+//     x
+//    / \
+//   y   z
+//    \ /
+//     w
+//
+// Without glitch-freedom: w might see old y with new z (or vice versa) = GLITCH
+// With basis checking: w waits until both y and z have consistent basis = NO GLITCH
+
+service diamond {
+    var x = 1;
+    
+    @glitchfree def y = x + 1;
+    @glitchfree def z = x * 2;
+    @glitchfree def w = y + z;
+    
+    pub def update_x = action { x = 5; };
+}
+
+@test(diamond) {
+    do update_x;
+    assert(y == 6);
+    assert(z == 10);
+    assert(w == 16);
+}

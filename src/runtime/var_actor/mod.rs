@@ -36,6 +36,7 @@ pub struct VarActor {
     pub lock_state: LockState,
 
     pub latest_write_txn: Option<Txn>,
+    pub iteration: crate::runtime::message::Iteration,  // NEW: tracks version for BasisStamp
 }
 
 impl VarActor {
@@ -46,6 +47,7 @@ impl VarActor {
             pubsub: PubSub::new(),
             lock_state: LockState::new(),
             latest_write_txn: None,
+            iteration: crate::runtime::message::Iteration::ZERO,  // NEW: initialize to zero
         }
     }
 }
